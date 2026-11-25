@@ -58,7 +58,7 @@
     document,'script','https://connect.facebook.net/en_US/fbevents.js');
     /* eslint-enable */
     window.fbq('init', PIXEL_ID);
-    window.fbq('track', 'PageView');
+    sendMeta('PageView', {});
   }
 
   function apply(c) {
@@ -69,10 +69,21 @@
 
   /* ---------- eventi ---------- */
   // ga: nome evento GA4; meta: evento standard Meta (facoltativo)
-  function track(ga, params, meta) {
+  function track(ga, params, meta, extra) {
     params = params || {};
     if (gaLoaded) gtag('event', ga, params);
-    if (pixelLoaded && meta && window.fbq) window.fbq('track', meta, params);
+    if (pixelLoaded && meta) sendMeta(meta, params, extra);
+  }
+
+  // Pixel + API Conversioni con lo stesso event_id (Meta deduplica)
+  function sendMeta(name, params, extra) {
+    var id = name + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    if (window.fbq) window.fbq('track', name, params || {}, { eventID: id });
+    var body = { event_name: name, event_id: id, url: location.href.split('#')[0], custom_data: params || {} };
+    if (extra) { if (extra.email) body.email = extra.email; if (extra.phone) body.phone = extra.phone; }
+    try {
+      fetch('/api/capi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true, credentials: 'same-origin' });
+    } catch (e) {}
   }
   window.caTrack = track;
 
@@ -113,7 +124,12 @@
     if (!ok || !window.MutationObserver) return;
     var sent = false;
     new MutationObserver(function () {
-      if (!sent && !ok.hidden) { sent = true; track('generate_lead', { metodo: 'mini_guida' }, 'Lead'); }
+      if (!sent && !ok.hidden) {
+        sent = true;
+        var f = document.getElementById('book-form');
+        var em = f && f.querySelector('[name=email]'), ph = f && f.querySelector('[name=telefono]');
+        track('generate_lead', { metodo: 'mini_guida' }, 'Lead', { email: em && em.value, phone: ph && ph.value });
+      }
     }).observe(ok, { attributes: true, attributeFilter: ['hidden'] });
   }
 
