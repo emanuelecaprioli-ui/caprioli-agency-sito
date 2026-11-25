@@ -22,12 +22,18 @@ function phoneE164(p) {
   return /^\+[0-9]{8,15}$/.test(d) ? d : '';
 }
 
+let diag = [];
 async function brevo(path, body, key) {
   const r = await fetch(BREVO + path, {
     method: 'POST',
     headers: { 'api-key': key, 'Content-Type': 'application/json', accept: 'application/json' },
     body: JSON.stringify(body),
   });
+  if (!r.ok) {
+    let code = '';
+    try { code = (await r.json()).code || ''; } catch (e) {}
+    diag.push(path.split('/')[0] + ':' + r.status + (code ? ':' + code : ''));
+  }
   return r.ok;
 }
 
@@ -66,8 +72,9 @@ module.exports = async (req, res) => {
   const nome = String(b.nome || '').trim().slice(0, 120);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !nome || !b.privacy) { res.status(400).json({ ok: false }); return; }
 
+  diag = [];
   const key = process.env.BREVO_API_KEY;
-  if (!key) { res.status(200).json({ ok: true, email_sent: false }); return; }
+  if (!key) { res.status(200).json({ ok: true, email_sent: false, diag: ['no_key'] }); return; }
 
   const parts = nome.split(/\s+/);
   const attributes = { FIRSTNAME: parts[0], LASTNAME: parts.slice(1).join(' ') };
@@ -97,7 +104,7 @@ module.exports = async (req, res) => {
       subject: 'Nuovo lead mini guida: ' + nome,
       htmlContent: notifyEmail(data), tags: ['notifica-lead'],
     }, key);
-    res.status(200).json({ ok: true, saved, email_sent: sent });
+    res.status(200).json({ ok: true, saved, email_sent: sent, diag });
   } catch (e) {
     res.status(200).json({ ok: true, email_sent: false });
   }
