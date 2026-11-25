@@ -385,10 +385,7 @@ dialog.modal[open]::backdrop{animation:fade 220ms ease}
   <div style="padding: 4px 28px 32px">
     <p style="margin: 0 0 8px; font-family: Archivo, sans-serif; font-weight: 800; font-size: 26px; line-height: 1.1">Scarica la mini guida «Medico online: cosa puoi fare e cosa no»</p>
     <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.5; color: #33406A">Lasciami i tuoi dati e scaricalo subito.</p>
-    <form id="book-form" action="https://api.web3forms.com/submit" method="POST" style="display: grid; gap: 14px">
-      <input type="hidden" name="access_key" value="INCOLLA-QUI-LA-TUA-CHIAVE">
-      <input type="hidden" name="subject" value="Download mini guida Medico online">
-      <input type="hidden" name="from_name" value="Sito Caprioli Agency">
+    <form id="book-form" action="/api/lead" method="POST" style="display: grid; gap: 14px">
       <input type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" style="display: none">
       <label class="fld">Nome e cognome<input type="text" name="nome" autocomplete="name" required></label>
       <label class="fld">Email<input type="email" name="email" autocomplete="email" required></label>
@@ -398,7 +395,7 @@ dialog.modal[open]::backdrop{animation:fade 220ms ease}
       <p id="book-msg" role="alert" style="margin: 0; font-size: 15px; font-weight: 700; color: #A11D1D"></p>
     </form>
     <div id="book-ok" hidden>
-      <p style="margin: 0 0 16px; font-size: 17px; line-height: 1.5">Grazie. Il download parte da solo; se non parte, usa il tasto qui sotto.</p>
+      <p id="book-ok-msg" style="margin: 0 0 16px; font-size: 17px; line-height: 1.5">Grazie. Il download parte da solo; se non parte, usa il tasto qui sotto.</p>
       <a class="btn" id="book-link" href="#" download style="display: block; text-align: center; background: #F5C518; color: #0E1B3D; padding: 18px; font-weight: 700; font-size: 17px; text-decoration: none">Scarica il PDF</a>
     </div>
   </div>
@@ -440,10 +437,21 @@ var BOOK_PDF = '/assets/manuale-medico-online.pdf';
   var btn=f.querySelector('button[type=submit]'), label=btn.textContent; link.href=BOOK_PDF;
   f.addEventListener('submit',function(e){
     e.preventDefault(); msg.textContent=''; btn.disabled=true; btn.textContent='Invio in corso...';
-    fetch(f.action,{method:'POST',headers:{'Accept':'application/json'},body:new FormData(f)})
-      .then(function(r){return r.json();})
-      .then(function(d){ if(d&&d.success){ f.hidden=true; ok.hidden=false; link.click(); } else { throw new Error(); } })
-      .catch(function(){ btn.disabled=false; btn.textContent=label; msg.textContent='Invio non riuscito. Riprova oppure scrivimi a info@caprioliagency.com.'; });
+    var data={}; new FormData(f).forEach(function(v,k){ data[k]=v; });
+    data.privacy = f.querySelector('[name=privacy]').checked;
+    try { var u=JSON.parse(sessionStorage.getItem('ca_utm')||'{}'); for (var k in u) data[k]=u[k]; } catch(_){}
+    data.pagina = location.href.split('#')[0];
+    function done(d){
+      if (d && d.email_sent) document.getElementById('book-ok-msg').textContent='Grazie. Ti ho inviato la mini guida anche via email (controlla pure lo spam). Il download parte da solo; se non parte, usa il tasto qui sotto.';
+      f.hidden=true; ok.hidden=false; link.click();
+    }
+    fetch(f.action,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)})
+      .then(function(r){ if(r.status===400) throw new Error('dati'); return r.json(); })
+      .then(done)
+      .catch(function(e){
+        if (e && e.message==='dati') { btn.disabled=false; btn.textContent=label; msg.textContent='Controlla nome, email e consenso privacy, poi riprova.'; return; }
+        done(null);
+      });
   });
 })();
 </script>
