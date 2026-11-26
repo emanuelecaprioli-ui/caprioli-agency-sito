@@ -23,13 +23,13 @@ function phoneE164(p) {
 }
 
 let diag = [];
-async function brevo(path, body, key) {
+async function brevo(path, body, key, quiet) {
   const r = await fetch(BREVO + path, {
     method: 'POST',
     headers: { 'api-key': key, 'Content-Type': 'application/json', accept: 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!r.ok) {
+  if (!r.ok && !quiet) {
     let code = '';
     try { code = (await r.json()).code || ''; } catch (e) {}
     diag.push(path.split('/')[0] + ':' + r.status + (code ? ':' + code : ''));
@@ -77,7 +77,9 @@ module.exports = async (req, res) => {
   if (!key) { res.status(200).json({ ok: true, email_sent: false, diag: ['no_key'] }); return; }
 
   const parts = nome.split(/\s+/);
-  const attributes = { FIRSTNAME: parts[0], LASTNAME: parts.slice(1).join(' ') };
+  const attributes = { NOME: parts[0], COGNOME: parts.slice(1).join(' ') };
+  const fonte = [b.utm_source, b.utm_medium, b.utm_campaign].filter(Boolean).map((x) => String(x).slice(0, 60)).join(' / ') || 'diretto';
+  attributes.FONTE = fonte;
   const sms = phoneE164(b.telefono);
   if (sms) attributes.SMS = sms;
 
@@ -89,6 +91,7 @@ module.exports = async (req, res) => {
   };
 
   try {
+    await brevo('contacts/attributes/normal/FONTE', { type: 'text' }, key, true); // crea il campo se non esiste
     let saved = await brevo('contacts', { email, attributes, listIds: [LIST_ID], updateEnabled: true }, key);
     if (!saved && sms) { // se Brevo rifiuta il telefono, salva senza
       delete attributes.SMS;
